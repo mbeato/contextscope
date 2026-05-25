@@ -12,7 +12,8 @@
     "start": "next start",
     "prod": "next build && next start",
     "lint": "eslint",
-    "prepublishOnly": "next build"
+    "prepublishOnly": "next build",
+    "release": "test -f .env.publish || (echo 'missing .env.publish — copy .env.publish.example and add your NPM_TOKEN' && exit 1) && set -a && . ./.env.publish && set +a && npm publish"
   },
   "files": [
     "bin",

@@ -49,3 +49,4 @@ dist
 *.log
 .turbo
 .vercel
+!.env.publish.example
