@@ -144,11 +144,13 @@ async function scanUserAgents(): Promise<InventoryItem[]> {
   return out;
 }
 
+const MAX_COMMAND_DEPTH = 8;
+
 async function scanUserCommands(): Promise<InventoryItem[]> {
   const dir = join(CLAUDE_DIR, "commands");
   if (!(await exists(dir))) return [];
   const out: InventoryItem[] = [];
-  await walkCommandDir(dir, "", out, "user");
+  await walkCommandDir(dir, "", out, "user", undefined, undefined, false, 0, new Set());
   return out;
 }
 
@@ -159,14 +161,26 @@ async function walkCommandDir(
   source: Source,
   plugin?: string,
   pluginKey?: string,
-  pluginDisabled = false
+  pluginDisabled = false,
+  depth = 0,
+  visited: Set<string> = new Set()
 ): Promise<void> {
+  if (depth > MAX_COMMAND_DEPTH) return;
+  // Guard against symlink loops by tracking visited inodes.
+  try {
+    const st = await stat(dir);
+    const key = `${st.dev}:${st.ino}`;
+    if (visited.has(key)) return;
+    visited.add(key);
+  } catch {
+    return;
+  }
   const entries = await readdir(dir, { withFileTypes: true });
   for (const e of entries) {
     const p = join(dir, e.name);
     if (e.isDirectory()) {
       const ns = prefix ? `${prefix}:${e.name}` : e.name;
-      await walkCommandDir(p, ns, out, source, plugin, pluginKey, pluginDisabled);
+      await walkCommandDir(p, ns, out, source, plugin, pluginKey, pluginDisabled, depth + 1, visited);
       continue;
     }
     if (!e.isFile()) continue;
@@ -270,7 +284,7 @@ async function scanPluginCache(enabledPlugins: Record<string, boolean>): Promise
         // commands/<name>.md (plugin slash commands, may be nested)
         const commandsDir = join(vDir, "commands");
         if (await exists(commandsDir)) {
-          await walkCommandDir(commandsDir, "", out, "plugin", pluginLabel, pluginKey, pluginDisabled);
+          await walkCommandDir(commandsDir, "", out, "plugin", pluginLabel, pluginKey, pluginDisabled, 0, new Set());
         }
       }
     }

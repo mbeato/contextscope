@@ -40,7 +40,10 @@ export type TranscriptResult = {
 
 // Module-level cache: persists across server-component renders within the same
 // Next.js dev/prod process. Keyed by filePath; invalidated on mtime change.
+// Capped via simple FIFO eviction (Map preserves insertion order) so a
+// long-running process scanning thousands of transcripts can't grow unbounded.
 const cache = new Map<string, TranscriptResult>();
+const MAX_CACHE_ENTRIES = 5000;
 
 function inferProjectPath(dirName: string): string {
   return dirName.replace(/^-/, "/").replaceAll("-", "/");
@@ -158,7 +161,13 @@ async function getFileResult(filePath: string, mtimeMs: number): Promise<Transcr
   const cached = cache.get(filePath);
   if (cached && cached.mtimeMs === mtimeMs) return cached;
   const fresh = await parseFile(filePath, mtimeMs);
+  if (cached) cache.delete(filePath); // re-insert at tail so FIFO eviction stays correct
   cache.set(filePath, fresh);
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
   return fresh;
 }
 

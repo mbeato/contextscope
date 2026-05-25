@@ -132,8 +132,14 @@ export async function getContextFiles(): Promise<ContextFile[]> {
       const dirName = String(d.name);
       const memPath = join(PROJECTS_DIR, dirName, "memory", "MEMORY.md");
       if (!(await exists(memPath))) continue;
-      // Project dir name encodes cwd, e.g. "-Users-vtx-VTX" => /Users/vtx/VTX
-      const inferredCwd = dirName.replace(/^-/, "/").replaceAll("-", "/");
+      // Project dir name encodes cwd, e.g. "-Users-vtx-VTX" => /Users/vtx/VTX.
+      // Strip control chars before display — POSIX filenames technically allow
+      // them and a crafted dir name shouldn't smuggle escape sequences into the UI.
+      const inferredCwd = dirName
+        .replace(/^-/, "/")
+        .replaceAll("-", "/")
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x1f\x7f]/g, "");
       out.push({
         category: "memory-md",
         name: `${dirName}/memory/MEMORY.md`,

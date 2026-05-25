@@ -139,6 +139,10 @@ async function main() {
   const port = await findPort();
   const url = `http://localhost:${port}`;
 
+  // IMPORTANT: HOSTNAME must override anything inherited from process.env.
+  // Keep `...process.env` FIRST and `HOSTNAME: "127.0.0.1"` LAST so a stray
+  // HOSTNAME=0.0.0.0 in the user's shell can't open the dashboard to the LAN.
+  // Same for PORT.
   const child = fork(STANDALONE_SERVER, [], {
     env: { ...process.env, PORT: String(port), HOSTNAME: "127.0.0.1" },
     stdio: "inherit",

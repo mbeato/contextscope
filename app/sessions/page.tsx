@@ -1,8 +1,14 @@
+import { homedir } from "node:os";
 import { getSessions, summarizeSessions } from "@/lib/sessions";
 import { Receipt, Stat } from "../components/Receipt";
 
 const fmt = new Intl.NumberFormat("en-US");
 const DAYS = 30;
+const HOME = homedir();
+
+function tildify(p: string): string {
+  return p.startsWith(HOME) ? "~" + p.slice(HOME.length) : p;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +124,7 @@ export default async function SessionsPage() {
                             {session.endTime ? new Date(session.endTime).toISOString().slice(0, 10) : "—"}
                           </td>
                           <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300 truncate max-w-[280px]">
-                            <code className="text-xs">{session.projectPath}</code>
+                            <code className="text-xs">{tildify(session.projectPath)}</code>
                           </td>
                           <td className="px-5 py-3 text-zinc-500 text-xs">
                             {session.models.map((m) => m.replace("claude-", "")).join(", ")}
@@ -153,7 +159,7 @@ export default async function SessionsPage() {
                       return (
                         <tr key={p.project} className="border-b border-zinc-200/60 dark:border-zinc-800/60 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 transition-colors">
                           <td className="px-5 py-3 truncate max-w-[420px]">
-                            <code className="text-xs">{p.projectPath}</code>
+                            <code className="text-xs">{tildify(p.projectPath)}</code>
                           </td>
                           <td className="px-5 py-3 text-right tabular-nums text-zinc-500">{p.count}</td>
                           <td className="px-5 py-3 text-right tabular-nums">{fmt.format(p.turns)}</td>

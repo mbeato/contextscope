@@ -46,20 +46,23 @@ async function runHook(command: string, sampleInput: object): Promise<{ stdout: 
       resolve({ stdout, timeout: true });
     }, DRY_RUN_TIMEOUT_MS);
     child.stdout?.on("data", (d) => {
-      if (stdout.length >= MAX_STDOUT_BYTES) {
-        if (!done) {
-          done = true;
-          clearTimeout(timer);
-          kill();
-          resolve({ stdout });
-        }
+      if (done) return;
+      const remaining = MAX_STDOUT_BYTES - stdout.length;
+      if (remaining <= 0) {
+        done = true;
+        clearTimeout(timer);
+        kill();
+        resolve({ stdout });
         return;
       }
-      stdout += d.toString();
-      if (stdout.length > MAX_STDOUT_BYTES) stdout = stdout.slice(0, MAX_STDOUT_BYTES);
+      const chunk = d.toString();
+      stdout += chunk.length > remaining ? chunk.slice(0, remaining) : chunk;
     });
     child.stderr?.on("data", (d) => {
-      if (stderr.length < MAX_STDOUT_BYTES) stderr += d.toString();
+      const remaining = MAX_STDOUT_BYTES - stderr.length;
+      if (remaining <= 0) return;
+      const chunk = d.toString();
+      stderr += chunk.length > remaining ? chunk.slice(0, remaining) : chunk;
     });
     child.on("error", (err) => {
       if (done) return;
