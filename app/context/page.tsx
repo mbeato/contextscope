@@ -1,8 +1,11 @@
+import { homedir } from "node:os";
 import { getContextFiles } from "@/lib/files";
 import { getHooks } from "@/lib/hooks";
 import { getMcpServers } from "@/lib/mcp";
 import { getLatestSettingsBackup, getRecentChanges } from "@/lib/recent";
 import { Receipt, Stat } from "../components/Receipt";
+
+const HOME = homedir();
 
 const fmt = new Intl.NumberFormat("en-US");
 
@@ -101,7 +104,7 @@ export default async function ContextPage() {
                     <tr className="border-b border-zinc-200/60 dark:border-zinc-800/60 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 transition-colors">
                       <td className="px-5 py-3 truncate max-w-[480px]">
                         <code className="text-xs">
-                          {latestBackup.path.replace(process.env.HOME ?? "", "~")}
+                          {latestBackup.path.replace(HOME, "~")}
                         </code>
                       </td>
                       <td className="px-5 py-3 text-zinc-500 text-xs">backup</td>

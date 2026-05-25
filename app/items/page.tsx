@@ -1,6 +1,6 @@
 import { getInventory, summarize } from "@/lib/inventory";
 import { getUsage, lookupUsage } from "@/lib/usage";
-import { getSessions, summarizeSessions } from "@/lib/sessions";
+import { getSessions } from "@/lib/sessions";
 import { getHooks } from "@/lib/hooks";
 import { getMcpServers } from "@/lib/mcp";
 import { Receipt, Stat } from "../components/Receipt";
@@ -35,7 +35,6 @@ export default async function ItemsPage() {
     getMcpServers(),
   ]);
   const inv = summarize(items);
-  const sess = summarizeSessions(sessions);
 
   const annotated = items.map((it) => ({ ...it, ...lookupUsage(it, usage) }));
   const sorted = [...annotated].sort((a, b) => {
@@ -195,18 +194,23 @@ export default async function ItemsPage() {
         {/* By plugin */}
         <section className="mb-6">
           <Receipt label="by plugin" pad="none">
-            <table className="w-full text-sm">
-              <thead className="text-left text-[10px] uppercase tracking-widest text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
-                <tr>
-                  <th className="px-5 py-3 font-normal">plugin</th>
-                  <th className="px-5 py-3 font-normal text-right">items</th>
-                  <th className="px-5 py-3 font-normal text-right">per turn</th>
-                  <th className="px-5 py-3 font-normal text-right">body</th>
-                  <th className="px-5 py-3 font-normal text-center">enabled</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inv.byPlugin.map((p) => {
+            {inv.byPlugin.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-zinc-500">
+                No plugins detected in <code>~/.claude/plugins/cache/</code>.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-left text-[10px] uppercase tracking-widest text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
+                  <tr>
+                    <th className="px-5 py-3 font-normal">plugin</th>
+                    <th className="px-5 py-3 font-normal text-right">items</th>
+                    <th className="px-5 py-3 font-normal text-right">per turn</th>
+                    <th className="px-5 py-3 font-normal text-right">body</th>
+                    <th className="px-5 py-3 font-normal text-center">enabled</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inv.byPlugin.map((p) => {
                   const sample = items.find((it) => it.plugin === p.plugin);
                   const key = sample?.pluginKey;
                   // Source of truth = the inventory item's `disabled` field
@@ -238,8 +242,9 @@ export default async function ItemsPage() {
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            )}
           </Receipt>
         </section>
 

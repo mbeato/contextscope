@@ -1,8 +1,8 @@
 "use server";
 
-import { readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { revalidatePath } from "next/cache";
 
 const HOME = homedir();
@@ -10,26 +10,51 @@ const CLAUDE_DIR = join(HOME, ".claude");
 const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");
 const MAX_BACKUPS = 5;
 
-// Allowed dirs are resolved once at module load so they include any symlink
-// normalization the runtime applies.
+// Lexical resolve at module load. Allowed dirs themselves are NOT realpath'd
+// here because the dirs may not exist on a fresh ~/.claude install; we realpath
+// them lazily inside the check.
 const ALLOWED_DIRS = [
   resolve(CLAUDE_DIR, "skills"),
   resolve(CLAUDE_DIR, "agents"),
   resolve(CLAUDE_DIR, "commands"),
 ];
 
+async function realpathOrLexical(p: string): Promise<string> {
+  try {
+    return await realpath(p);
+  } catch {
+    // File doesn't exist yet (e.g. checking the .disabled sibling before rename).
+    // Fall back to realpath'ing the deepest existing ancestor + joining the rest,
+    // so a malicious "exists/<symlink>/../escape" can't slip through but a
+    // legitimate not-yet-created sibling still resolves correctly.
+    const parent = dirname(p);
+    if (parent === p) return resolve(p);
+    const realParent = await realpathOrLexical(parent);
+    return join(realParent, p.slice(parent.length + 1));
+  }
+}
+
 /**
- * Strict allowlist check. Resolves the input to an absolute path (collapsing
- * `..` and symlinks at the lexical level) and confirms it lives strictly under
- * one of the allowed dirs. Defends against traversal attacks like
- * `~/.claude/skills/../../.zshrc` which would pass a naive `startsWith` check.
+ * Strict allowlist check. Follows symlinks via realpath() and confirms the
+ * canonical absolute path lives under one of the allowed dirs. Defends against
+ * both lexical traversal (`~/.claude/skills/../../.zshrc`) and symlink escape
+ * (a `~/.claude/skills/foo` symlink pointing outside).
  */
-function safeUserPath(p: string): boolean {
+async function safeUserPath(p: string): Promise<boolean> {
   if (typeof p !== "string" || p.length === 0) return false;
-  const resolved = resolve(p);
-  return ALLOWED_DIRS.some(
-    (allowed) => resolved === allowed || resolved.startsWith(allowed + sep)
-  );
+  const real = await realpathOrLexical(resolve(p));
+  // Realpath the allowed-dir prefixes too — if the user has symlinked
+  // ~/.claude/skills itself, both sides need to canonicalize the same way.
+  for (const allowed of ALLOWED_DIRS) {
+    let realAllowed: string;
+    try {
+      realAllowed = await realpath(allowed);
+    } catch {
+      realAllowed = allowed; // dir doesn't exist on this install — match lexically
+    }
+    if (real === realAllowed || real.startsWith(realAllowed + sep)) return true;
+  }
+  return false;
 }
 
 async function backupSettings(): Promise<void> {
@@ -58,7 +83,7 @@ async function backupSettings(): Promise<void> {
 }
 
 export async function toggleUserItem(filePath: string): Promise<void> {
-  if (!safeUserPath(filePath)) {
+  if (!(await safeUserPath(filePath))) {
     throw new Error(
       `Refusing to toggle file outside ~/.claude/skills, /agents, or /commands: ${filePath}`
     );
@@ -94,7 +119,7 @@ export async function disableUserItems(filePaths: string[]): Promise<{ moved: nu
   let moved = 0;
   let skipped = 0;
   for (const fp of filePaths) {
-    if (!safeUserPath(fp)) {
+    if (!(await safeUserPath(fp))) {
       skipped++;
       continue;
     }

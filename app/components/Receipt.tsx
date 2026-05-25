@@ -45,7 +45,7 @@ export function Receipt({
           )}
         </div>
       )}
-      <div className={padding}>{children}</div>
+      <div className={`${padding} ${pad === "none" ? "overflow-x-auto" : ""}`}>{children}</div>
     </div>
   );
 }
