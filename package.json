@@ -1,15 +1,58 @@
 {
-  "name": "usage",
+  "name": "tokenscope",
   "version": "0.1.0",
-  "private": true,
+  "description": "Local dashboard auditing Claude Code's per-turn token context (skills, agents, commands, CLAUDE.md, MEMORY.md, hooks, MCP) with toggle-based disable and session analytics.",
+  "type": "module",
+  "bin": {
+    "tokenscope": "./bin/cli.js"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "prod": "next build && next start",
+    "lint": "eslint",
+    "prepublishOnly": "next build"
+  },
+  "files": [
+    "bin",
+    ".next/standalone",
+    ".next/static",
+    "public",
+    "plugin",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude",
+    "anthropic",
+    "token",
+    "context",
+    "audit",
+    "ccusage",
+    "skills",
+    "agents",
+    "mcp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mbeato/tokenscope.git"
+  },
+  "homepage": "https://github.com/mbeato/tokenscope#readme",
+  "bugs": {
+    "url": "https://github.com/mbeato/tokenscope/issues"
+  },
+  "engines": {
+    "node": ">=18.18"
   },
   "dependencies": {
+    "gray-matter": "^4.0.3",
+    "js-tiktoken": "^1.0.21",
     "next": "16.2.6",
+    "open": "^11.0.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

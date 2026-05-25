@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# tokenscope
 
-## Getting Started
+A local dashboard that audits the **per-turn token context** Claude Code loads on every conversation turn — and gives you toggle-based control to disable what you don't use.
 
-First, run the development server:
+`/stats`, `/cost`, and `ccusage` show **aggregate** spend. None of them break down what's *inside* the per-turn baseline or let you act on the audit. At 1M-context Opus, every unused skill, agent, command, or hook output that lives in the available-list block is paying full cache-read cost on every turn — for a heavy user, that's hundreds of millions of tokens per month.
+
+## Install + run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx tokenscope
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Picks a free port starting at 3939, opens your browser, audits in real time.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Or install globally so the command stays around:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install -g tokenscope
+tokenscope
+```
 
-## Learn More
+Flags:
+- `--port <n>` — pin a port
+- `--no-open` — don't auto-open the browser
+- `--help` — full usage
 
-To learn more about Next.js, take a look at the following resources:
+## Optional: Claude Code slash command
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+After installing globally, run:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+tokenscope install-plugin
+```
 
-## Deploy on Vercel
+This copies a `/usage` slash command into `~/.claude/commands/usage.md`. Restart Claude Code, then `/usage` in any session asks Claude to launch the dashboard in the background and report the URL. Remove with `tokenscope uninstall-plugin`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## What it shows
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Skills, agents, slash commands** (user + plugin) — per-turn description cost + body cost on invocation
+- **CLAUDE.md** (global + every project) + **MEMORY.md** (per-project auto-memory) — full token count, where loaded
+- **SessionStart + UserPromptSubmit hook output** — dry-run with sample input, output tokenized
+- **MCP servers** — direct + PTC-proxied downstream
+- **Session analytics** — top expensive sessions, daily burn, cache hit ratio, output:input ratio, p75/p95
+- **Invocation counts** per skill/agent over the last 30 days from JSONL transcripts
+- **Recommendation engine** — bulk-disable unused user items in one click, surface long-session patterns
+
+## What it does
+
+- Toggles individual user-level skills / agents / commands (renames file with `.disabled` suffix — reversible)
+- Toggles whole plugins (flips `enabledPlugins[<plugin>@<marketplace>]` in `~/.claude/settings.json`)
+- Backs up `settings.json` before every mutation (`~/.claude/settings.json.usage-bak-<timestamp>`, 5 most recent kept)
+- Bulk-disables every user item never invoked in the last 30 days
+
+> **Toggles take effect on the next Claude Code restart** — CC reads skills, agents, commands, and `settings.json` at startup. There's no hot-reload mechanism.
+
+## Known constraint
+
+Plugin-bundled skills/agents (e.g. `superpowers:brainstorming`, `gsd:plan-phase`) **cannot be individually disabled** in Claude Code's current model — you can only toggle the whole plugin. The "By plugin" table handles this; individual plugin items in the main table show `(plugin)` as their toggle status.
+
+## How it measures tokens
+
+Uses [`js-tiktoken`](https://github.com/dqbd/tiktoken) with the `cl100k_base` encoder as a proxy for Anthropic's tokenizer (not publicly released). Expect ~5–10% absolute deviation; relative rankings should be accurate.
+
+## What it can't measure
+
+- The base Claude Code system prompt (built into the binary)
+- Tool-call results that compound mid-session
+- The `available skills` / `available agents` wrapper blocks the harness adds around your descriptions
+
+## Development
+
+```bash
+git clone <repo> tokenscope
+cd tokenscope
+npm install
+npm run dev       # localhost:3000 — slow page loads from Next.js dev bundling
+npm run prod      # build + start in production mode — ~0.6s warm reload
+```
+
+Requires Node 18+. macOS/Linux paths; Windows untested but uses `os.homedir()` throughout.
+
+## Architecture
+
+- **`lib/transcripts.ts`** — unified single-pass JSONL parser with per-file mtime cache; consumed by `usage.ts` + `sessions.ts`
+- **`lib/inventory.ts`** — scans skills, agents, commands; detects `.disabled` siblings; reads `enabledPlugins`
+- **`lib/usage.ts`** — invocation counts per skill/agent from transcripts
+- **`lib/sessions.ts`** — per-session token aggregation + summary stats
+- **`lib/files.ts`** — CLAUDE.md + MEMORY.md scanner with denylist for dependency-bundled noise
+- **`lib/hooks.ts`** — reads settings.json hooks, parallel dry-runs SessionStart + UserPromptSubmit
+- **`lib/mcp.ts`** — reads `.claude.json` mcpServers, parses PTC's downstream config.yaml
+- **`app/actions.ts`** — server actions for toggles + bulk disable; backs up settings before write
+- **`app/page.tsx`** — single server-rendered page; filesystem re-read on every load (cached internally)
+- **`bin/cli.js`** — CLI entry: spawns Next.js standalone server, opens browser, ships subcommands
+
+## License
+
+MIT
