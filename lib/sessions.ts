@@ -14,6 +14,9 @@ export type Session = {
   cacheCreationTokens: number;
   outputTokens: number;
   totalTokens: number;
+  toolCalls: Record<string, number>;
+  toolErrors: number;
+  sidechainTurns: number;
 };
 
 function toSession(t: TranscriptResult): Session {
@@ -33,6 +36,9 @@ function toSession(t: TranscriptResult): Session {
     cacheCreationTokens: t.cacheCreationTokens,
     outputTokens: t.outputTokens,
     totalTokens,
+    toolCalls: t.toolCalls,
+    toolErrors: t.toolErrors,
+    sidechainTurns: t.sidechainTurns,
   };
 }
 
@@ -56,6 +62,11 @@ export type SessionsSummary = {
   p95SessionTokens: number;
   longSessions: Session[];
   dailyBurn: { date: string; tokens: number }[];
+  byProject: { project: string; projectPath: string; count: number; tokens: number; turns: number }[];
+  totalToolCalls: Record<string, number>;
+  totalToolErrors: number;
+  totalSidechainTurns: number;
+  totalTurns: number;
 };
 
 const LONG_SESSION_THRESHOLD = 500_000;
@@ -74,6 +85,11 @@ export function summarizeSessions(sessions: Session[]): SessionsSummary {
       p95SessionTokens: 0,
       longSessions: [],
       dailyBurn: [],
+      byProject: [],
+      totalToolCalls: {},
+      totalToolErrors: 0,
+      totalSidechainTurns: 0,
+      totalTurns: 0,
     };
   }
   const sortedTokens = [...sessions].map((s) => s.totalTokens).sort((a, b) => a - b);
@@ -108,6 +124,40 @@ export function summarizeSessions(sessions: Session[]): SessionsSummary {
     .map(([date, tokens]) => ({ date, tokens }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // By project
+  const projectMap = new Map<
+    string,
+    { project: string; projectPath: string; count: number; tokens: number; turns: number }
+  >();
+  for (const s of sessions) {
+    const cur = projectMap.get(s.project) ?? {
+      project: s.project,
+      projectPath: s.projectPath,
+      count: 0,
+      tokens: 0,
+      turns: 0,
+    };
+    cur.count += 1;
+    cur.tokens += s.totalTokens;
+    cur.turns += s.turnCount;
+    projectMap.set(s.project, cur);
+  }
+  const byProject = [...projectMap.values()].sort((a, b) => b.tokens - a.tokens);
+
+  // Tool calls aggregate
+  const totalToolCalls: Record<string, number> = {};
+  let totalToolErrors = 0;
+  let totalSidechainTurns = 0;
+  let totalTurns = 0;
+  for (const s of sessions) {
+    for (const [name, n] of Object.entries(s.toolCalls)) {
+      totalToolCalls[name] = (totalToolCalls[name] ?? 0) + n;
+    }
+    totalToolErrors += s.toolErrors;
+    totalSidechainTurns += s.sidechainTurns;
+    totalTurns += s.turnCount;
+  }
+
   return {
     count: sessions.length,
     totalTokens: total,
@@ -120,5 +170,10 @@ export function summarizeSessions(sessions: Session[]): SessionsSummary {
     p95SessionTokens: p95,
     longSessions,
     dailyBurn,
+    byProject,
+    totalToolCalls,
+    totalToolErrors,
+    totalSidechainTurns,
+    totalTurns,
   };
 }

@@ -33,6 +33,9 @@ export type TranscriptResult = {
   cacheCreationTokens: number;
   outputTokens: number;
   invocations: Invocation[];
+  toolCalls: Record<string, number>;  // tool name -> count
+  toolErrors: number;                  // total tool_result with is_error: true
+  sidechainTurns: number;              // turns with isSidechain: true (subagent context)
 };
 
 // Module-level cache: persists across server-component renders within the same
@@ -62,6 +65,9 @@ async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptR
     cacheCreationTokens: 0,
     outputTokens: 0,
     invocations: [],
+    toolCalls: {},
+    toolErrors: 0,
+    sidechainTurns: 0,
   };
   const modelSet = new Set<string>();
 
@@ -72,11 +78,11 @@ async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptR
     });
     rl.on("line", (line) => {
       if (!line || line[0] !== "{") return;
-      // Prefilter: skip lines that obviously have neither a tool_use we care about
-      // nor a usage field.
+      // Prefilter: usage events, tool_use events, and tool_result events (for errors).
       const hasUsage = line.includes('"usage"');
       const hasToolUse = line.includes('"tool_use"');
-      if (!hasUsage && !hasToolUse) return;
+      const hasToolResult = line.includes('"tool_result"');
+      if (!hasUsage && !hasToolUse && !hasToolResult) return;
 
       let rec: Record<string, unknown>;
       try {
@@ -89,8 +95,9 @@ async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptR
         | undefined;
       const tsRaw = rec.timestamp;
       const tsMs = typeof tsRaw === "string" ? Date.parse(tsRaw) : NaN;
+      const isSidechain = rec.isSidechain === true;
 
-      // Usage aggregation
+      // Usage aggregation (assistant messages)
       const usage = msg?.usage;
       if (usage) {
         result.inputTokens += Number(usage.input_tokens) || 0;
@@ -98,6 +105,7 @@ async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptR
         result.cacheCreationTokens += Number(usage.cache_creation_input_tokens) || 0;
         result.outputTokens += Number(usage.output_tokens) || 0;
         result.turnCount += 1;
+        if (isSidechain) result.sidechainTurns += 1;
         if (msg?.model) modelSet.add(msg.model);
         if (Number.isFinite(tsMs)) {
           if (!result.startTime || tsMs < result.startTime) result.startTime = tsMs;
@@ -105,26 +113,32 @@ async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptR
         }
       }
 
-      // Tool_use scanning
-      if (hasToolUse && Array.isArray(msg?.content)) {
+      // Content scan: tool_use (counts + invocations) and tool_result (errors)
+      if (Array.isArray(msg?.content)) {
         for (const c of msg.content) {
           if (!c || typeof c !== "object") continue;
           const co = c as Record<string, unknown>;
-          if (co.type !== "tool_use") continue;
-          const input = co.input as Record<string, unknown> | undefined;
-          if (!input) continue;
-          if (co.name === "Skill" && typeof input.skill === "string") {
-            result.invocations.push({
-              kind: "skill",
-              name: input.skill,
-              ts: Number.isFinite(tsMs) ? tsMs : 0,
-            });
-          } else if (co.name === "Agent" && typeof input.subagent_type === "string") {
-            result.invocations.push({
-              kind: "agent",
-              name: input.subagent_type,
-              ts: Number.isFinite(tsMs) ? tsMs : 0,
-            });
+          if (co.type === "tool_use") {
+            const toolName = typeof co.name === "string" ? co.name : "(unknown)";
+            result.toolCalls[toolName] = (result.toolCalls[toolName] ?? 0) + 1;
+            const input = co.input as Record<string, unknown> | undefined;
+            if (input) {
+              if (toolName === "Skill" && typeof input.skill === "string") {
+                result.invocations.push({
+                  kind: "skill",
+                  name: input.skill,
+                  ts: Number.isFinite(tsMs) ? tsMs : 0,
+                });
+              } else if (toolName === "Agent" && typeof input.subagent_type === "string") {
+                result.invocations.push({
+                  kind: "agent",
+                  name: input.subagent_type,
+                  ts: Number.isFinite(tsMs) ? tsMs : 0,
+                });
+              }
+            }
+          } else if (co.type === "tool_result" && co.is_error === true) {
+            result.toolErrors += 1;
           }
         }
       }

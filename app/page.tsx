@@ -4,6 +4,7 @@ import { getContextFiles } from "@/lib/files";
 import { getMcpServers } from "@/lib/mcp";
 import { getHooks } from "@/lib/hooks";
 import { getSessions, summarizeSessions } from "@/lib/sessions";
+import { getLatestSettingsBackup, getRecentChanges } from "@/lib/recent";
 import { disableUserItems, togglePlugin, toggleUserItem } from "./actions";
 
 const fmt = new Intl.NumberFormat("en-US");
@@ -27,7 +28,7 @@ function shortNumber(n: number): string {
 }
 
 export default async function Home() {
-  const [items, usage, pluginStates, contextFiles, mcpServers, hooks, sessions] = await Promise.all([
+  const [items, usage, pluginStates, contextFiles, mcpServers, hooks, sessions, recentChanges, latestBackup] = await Promise.all([
     getInventory(),
     getUsage(DAYS),
     getPluginStates(),
@@ -35,6 +36,8 @@ export default async function Home() {
     getMcpServers(),
     getHooks(),
     getSessions(DAYS),
+    getRecentChanges(7),
+    getLatestSettingsBackup(),
   ]);
   const inv = summarize(items);
   const sess = summarizeSessions(sessions);
@@ -164,6 +167,65 @@ export default async function Home() {
           </section>
         )}
 
+        {/* ---------------- Recent toggle activity ---------------- */}
+        {(recentChanges.length > 0 || latestBackup) && (
+          <section className="mb-10">
+            <h2 className="text-sm uppercase tracking-wider text-zinc-500 mb-3">
+              Recent toggle activity (last 7 days)
+            </h2>
+            <p className="text-xs text-zinc-500 mb-3">
+              Files renamed (toggled on/off) and the latest <code>settings.json</code> backup.
+              Useful for tracking what&apos;s changed since your last Claude Code restart.
+            </p>
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-100 dark:bg-zinc-900 text-left text-xs uppercase text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Item</th>
+                    <th className="px-4 py-2 font-medium">Kind</th>
+                    <th className="px-4 py-2 font-medium">State</th>
+                    <th className="px-4 py-2 font-medium text-right">Changed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestBackup && (
+                    <tr className="border-t border-zinc-200 dark:border-zinc-800">
+                      <td className="px-4 py-2 break-all">
+                        <code className="text-xs">{latestBackup.path.replace(process.env.HOME ?? "", "~")}</code>
+                      </td>
+                      <td className="px-4 py-2 text-zinc-500">backup</td>
+                      <td className="px-4 py-2 text-zinc-500">settings.json snapshot</td>
+                      <td className="px-4 py-2 text-right text-zinc-500 tabular-nums">
+                        {daysAgo(latestBackup.mtimeMs)}
+                      </td>
+                    </tr>
+                  )}
+                  {recentChanges.slice(0, 20).map((c) => (
+                    <tr key={c.filePath} className="border-t border-zinc-200 dark:border-zinc-800">
+                      <td className="px-4 py-2 font-medium">{c.name}</td>
+                      <td className="px-4 py-2 text-zinc-500">{c.kind}</td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] uppercase tracking-wider ${
+                            c.disabled
+                              ? "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+                              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          }`}
+                        >
+                          {c.disabled ? "disabled" : "enabled"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right text-zinc-500 tabular-nums">
+                        {daysAgo(c.mtimeMs)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         {/* ---------------- Summary cards ---------------- */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           <Stat
@@ -211,6 +273,38 @@ export default async function Home() {
                   label="Output : input"
                   value={`${(sess.outputInputRatio * 100).toFixed(2)}%`}
                   hint="thinking vs re-feed"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <Stat
+                  label="Tool calls"
+                  value={fmt.format(
+                    Object.values(sess.totalToolCalls).reduce((a, b) => a + b, 0)
+                  )}
+                  hint={`${Object.keys(sess.totalToolCalls).length} distinct tools`}
+                />
+                <Stat
+                  label="Tool errors"
+                  value={fmt.format(sess.totalToolErrors)}
+                  hint={`${(
+                    (sess.totalToolErrors /
+                      Math.max(1, Object.values(sess.totalToolCalls).reduce((a, b) => a + b, 0))) *
+                    100
+                  ).toFixed(1)}% of calls`}
+                />
+                <Stat
+                  label="Subagent turns"
+                  value={fmt.format(sess.totalSidechainTurns)}
+                  hint={`${(
+                    (sess.totalSidechainTurns / Math.max(1, sess.totalTurns)) *
+                    100
+                  ).toFixed(0)}% of all turns`}
+                />
+                <Stat
+                  label="Total turns"
+                  value={fmt.format(sess.totalTurns)}
+                  hint={`avg ${Math.round(sess.totalTurns / Math.max(1, sess.count))} per session`}
                 />
               </div>
 
@@ -286,6 +380,86 @@ export default async function Home() {
             </>
           )}
         </section>
+
+        {/* ---------------- Projects ---------------- */}
+        {sess.byProject.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-sm uppercase tracking-wider text-zinc-500 mb-3">
+              Burn by project ({DAYS} days)
+            </h2>
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-100 dark:bg-zinc-900 text-left text-xs uppercase text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Project</th>
+                    <th className="px-4 py-2 font-medium text-right">Sessions</th>
+                    <th className="px-4 py-2 font-medium text-right">Turns</th>
+                    <th className="px-4 py-2 font-medium text-right">Total tokens</th>
+                    <th className="px-4 py-2 font-medium text-right">Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sess.byProject.slice(0, 15).map((p) => {
+                    const share = sess.totalTokens > 0 ? (p.tokens / sess.totalTokens) * 100 : 0;
+                    return (
+                      <tr key={p.project} className="border-t border-zinc-200 dark:border-zinc-800">
+                        <td className="px-4 py-2 break-all">
+                          <code className="text-xs">{p.projectPath}</code>
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">{p.count}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{fmt.format(p.turns)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{shortNumber(p.tokens)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-zinc-500">
+                          {share.toFixed(1)}%
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* ---------------- Tools histogram ---------------- */}
+        {Object.keys(sess.totalToolCalls).length > 0 && (() => {
+          const tools = Object.entries(sess.totalToolCalls).sort((a, b) => b[1] - a[1]);
+          const maxCount = Math.max(1, ...tools.map(([, c]) => c));
+          return (
+            <section className="mb-10">
+              <h2 className="text-sm uppercase tracking-wider text-zinc-500 mb-3">
+                Tool calls ({DAYS} days)
+              </h2>
+              <p className="text-xs text-zinc-500 mb-3">
+                Every <code>tool_use</code> event across all session transcripts. Useful for
+                spotting redundancy (re-reading the same file, repeated greps).
+              </p>
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="px-4 py-3 space-y-1">
+                  {tools.map(([name, count]) => {
+                    const pct = (count / maxCount) * 100;
+                    return (
+                      <div key={name} className="flex items-center gap-3 text-xs">
+                        <div className="w-32 text-zinc-700 dark:text-zinc-300 truncate" title={name}>
+                          {name}
+                        </div>
+                        <div className="flex-1 bg-zinc-200 dark:bg-zinc-800 rounded h-3 overflow-hidden">
+                          <div
+                            className="h-full bg-sky-500 dark:bg-sky-600"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="w-20 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
+                          {fmt.format(count)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ---------------- Plugins ---------------- */}
         {inv.byPlugin.length > 0 && (
