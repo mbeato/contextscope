@@ -144,26 +144,24 @@ async function main() {
     stdio: "inherit",
   });
 
-  // Open browser once server is ready. We poll the port instead of waiting on
-  // child stdout — more portable across Next versions.
+  // Open browser once server is ready. Sequential polling (await between
+  // attempts) so we never have concurrent fetches racing to call open().
   if (!noOpen) {
     const { default: open } = await import("open");
-    const start = Date.now();
-    const poll = setInterval(async () => {
-      if (Date.now() - start > 10_000) {
-        clearInterval(poll);
-        return;
-      }
-      try {
-        const ok = await fetch(url, { method: "HEAD" }).then((r) => r.status >= 200);
-        if (ok) {
-          clearInterval(poll);
-          open(url).catch(() => {});
+    (async () => {
+      for (let i = 0; i < 50; i++) {
+        try {
+          const res = await fetch(url, { method: "HEAD" });
+          if (res.status < 500) {
+            await open(url).catch(() => {});
+            return;
+          }
+        } catch {
+          // not yet ready
         }
-      } catch {
-        // not yet ready
+        await new Promise((r) => setTimeout(r, 200));
       }
-    }, 200);
+    })();
   }
 
   process.stdout.write(`contextscope running on ${url}\n  (Ctrl+C to stop)\n`);

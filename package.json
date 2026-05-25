@@ -1,6 +1,6 @@
 {
   "name": "@mbeato/contextscope",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local dashboard auditing Claude Code's per-turn token context (skills, agents, commands, CLAUDE.md, MEMORY.md, hooks, MCP) with toggle-based disable and session analytics.",
   "type": "module",
   "bin": {
