@@ -21,7 +21,7 @@ export function Nav() {
             pathname === "/" ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
           } transition-colors`}
         >
-          tokenscope
+          contextscope
         </Link>
         <div className="flex items-center gap-5">
           {ROUTES.map((r) => {

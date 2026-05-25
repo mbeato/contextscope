@@ -1,10 +1,10 @@
 {
-  "name": "tokenscope",
+  "name": "contextscope",
   "version": "0.1.0",
   "description": "Local dashboard auditing Claude Code's per-turn token context (skills, agents, commands, CLAUDE.md, MEMORY.md, hooks, MCP) with toggle-based disable and session analytics.",
   "type": "module",
   "bin": {
-    "tokenscope": "./bin/cli.js"
+    "contextscope": "./bin/cli.js"
   },
   "scripts": {
     "dev": "next dev",
@@ -40,11 +40,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mbeato/tokenscope.git"
+    "url": "git+https://github.com/mbeato/contextscope.git"
   },
-  "homepage": "https://github.com/mbeato/tokenscope#readme",
+  "homepage": "https://github.com/mbeato/contextscope#readme",
   "bugs": {
-    "url": "https://github.com/mbeato/tokenscope/issues"
+    "url": "https://github.com/mbeato/contextscope/issues"
   },
   "engines": {
     "node": ">=18.18"

@@ -3,7 +3,7 @@ import "./globals.css";
 import { Nav } from "./components/Nav";
 
 export const metadata: Metadata = {
-  title: "tokenscope",
+  title: "contextscope",
   description:
     "Local dashboard auditing Claude Code's per-turn token context — skills, agents, commands, CLAUDE.md, MEMORY.md, hooks, MCP, and session analytics.",
 };

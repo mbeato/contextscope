@@ -77,7 +77,7 @@ export default async function Cockpit() {
       <div className="max-w-6xl mx-auto px-6 py-10">
         <header className="mb-8 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">tokenscope</h1>
+            <h1 className="text-xl font-semibold tracking-tight">contextscope</h1>
             <p className="text-[10px] uppercase tracking-widest text-zinc-500 mt-1">
               audit · trim · ship
             </p>
@@ -327,7 +327,7 @@ export default async function Cockpit() {
             cl100k_base · re-scanned every load · toggles apply on next CC restart
           </span>
           <a
-            href="https://github.com/mbeato/tokenscope"
+            href="https://github.com/mbeato/contextscope"
             className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
           >
             github →

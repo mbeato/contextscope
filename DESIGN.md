@@ -1,4 +1,4 @@
-# tokenscope — design system
+# contextscope — design system
 
 Local audit dashboard. Single-page Next.js 16 App Router app. Styled with Tailwind v4 (CSS-first, no config file) — no component library, no icon library committed.
 

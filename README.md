@@ -1,4 +1,4 @@
-# tokenscope
+# contextscope
 
 A local dashboard that audits the **per-turn token context** Claude Code loads on every conversation turn — and gives you toggle-based control to disable what you don't use.
 
@@ -7,7 +7,7 @@ A local dashboard that audits the **per-turn token context** Claude Code loads o
 ## Install + run
 
 ```bash
-npx tokenscope
+npx contextscope
 ```
 
 Picks a free port starting at 3939, opens your browser, audits in real time.
@@ -15,8 +15,8 @@ Picks a free port starting at 3939, opens your browser, audits in real time.
 Or install globally so the command stays around:
 
 ```bash
-npm install -g tokenscope
-tokenscope
+npm install -g contextscope
+contextscope
 ```
 
 Flags:
@@ -29,10 +29,10 @@ Flags:
 After installing globally, run:
 
 ```bash
-tokenscope install-plugin
+contextscope install-plugin
 ```
 
-This copies a `/usage` slash command into `~/.claude/commands/usage.md`. Restart Claude Code, then `/usage` in any session asks Claude to launch the dashboard in the background and report the URL. Remove with `tokenscope uninstall-plugin`.
+This copies a `/usage` slash command into `~/.claude/commands/usage.md`. Restart Claude Code, then `/usage` in any session asks Claude to launch the dashboard in the background and report the URL. Remove with `contextscope uninstall-plugin`.
 
 ## What it shows
 
@@ -70,8 +70,8 @@ Uses [`js-tiktoken`](https://github.com/dqbd/tiktoken) with the `cl100k_base` en
 ## Development
 
 ```bash
-git clone <repo> tokenscope
-cd tokenscope
+git clone <repo> contextscope
+cd contextscope
 npm install
 npm run dev       # localhost:3000 — slow page loads from Next.js dev bundling
 npm run prod      # build + start in production mode — ~0.6s warm reload

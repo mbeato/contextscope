@@ -95,7 +95,7 @@ If you `pick N and ship`, the minimum log entry that compiles:
 
 ```bash
 bun run ~/.claude/design-corpus/scripts/log-success.ts \
-  --project=tokenscope \
+  --project=contextscope \
   --component=page \
   --query="developer audit dashboard with recommendations banner, stat-card grid, dense data tables with toggle-to-disable rows, bar-chart histograms, and session analytics in monospace terminal aesthetic" \
   --variant=<slug-chosen> --seeded-by=linear,attio,posthog --score=9.3

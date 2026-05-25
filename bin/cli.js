@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * tokenscope CLI
+ * contextscope CLI
  *
  * Subcommands:
  *   (default)         spawn the dashboard server + open browser
@@ -35,12 +35,12 @@ const subcommand = args[0] && !args[0].startsWith("-") ? args[0] : null;
 if (args.includes("--help") || args.includes("-h")) {
   process.stdout.write(
     [
-      "tokenscope — local dashboard for Claude Code per-turn context audit",
+      "contextscope — local dashboard for Claude Code per-turn context audit",
       "",
       "Usage:",
-      "  tokenscope                     start the dashboard (default)",
-      "  tokenscope install-plugin      install the /usage slash command",
-      "  tokenscope uninstall-plugin    remove the /usage slash command",
+      "  contextscope                     start the dashboard (default)",
+      "  contextscope install-plugin      install the /usage slash command",
+      "  contextscope uninstall-plugin    remove the /usage slash command",
       "",
       "Flags (default cmd):",
       "  --port <n>     pin a port (default: find first free starting at 3939)",
@@ -166,7 +166,7 @@ async function main() {
     }, 200);
   }
 
-  process.stdout.write(`tokenscope running on ${url}\n  (Ctrl+C to stop)\n`);
+  process.stdout.write(`contextscope running on ${url}\n  (Ctrl+C to stop)\n`);
 
   const shutdown = (code = 0) => {
     if (!child.killed) child.kill("SIGTERM");
