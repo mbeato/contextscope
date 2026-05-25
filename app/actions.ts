@@ -35,26 +35,24 @@ async function realpathOrLexical(p: string): Promise<string> {
 }
 
 /**
- * Strict allowlist check. Follows symlinks via realpath() and confirms the
- * canonical absolute path lives under one of the allowed dirs. Defends against
- * both lexical traversal (`~/.claude/skills/../../.zshrc`) and symlink escape
- * (a `~/.claude/skills/foo` symlink pointing outside).
+ * Strict allowlist check. Returns the canonical real path if it lives under one
+ * of the allowed dirs, else null. Returning the resolved path (not just a
+ * boolean) lets callers operate on it directly — closing the TOCTOU window
+ * where an attacker could swap a symlink between the check and the fs op.
  */
-async function safeUserPath(p: string): Promise<boolean> {
-  if (typeof p !== "string" || p.length === 0) return false;
+async function resolveSafeUserPath(p: string): Promise<string | null> {
+  if (typeof p !== "string" || p.length === 0) return null;
   const real = await realpathOrLexical(resolve(p));
-  // Realpath the allowed-dir prefixes too — if the user has symlinked
-  // ~/.claude/skills itself, both sides need to canonicalize the same way.
   for (const allowed of ALLOWED_DIRS) {
     let realAllowed: string;
     try {
       realAllowed = await realpath(allowed);
     } catch {
-      realAllowed = allowed; // dir doesn't exist on this install — match lexically
+      realAllowed = allowed;
     }
-    if (real === realAllowed || real.startsWith(realAllowed + sep)) return true;
+    if (real === realAllowed || real.startsWith(realAllowed + sep)) return real;
   }
-  return false;
+  return null;
 }
 
 async function backupSettings(): Promise<void> {
@@ -62,7 +60,9 @@ async function backupSettings(): Promise<void> {
     const raw = await readFile(SETTINGS_PATH, "utf8");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const bakPath = join(CLAUDE_DIR, `settings.json.usage-bak-${stamp}`);
-    await writeFile(bakPath, raw, "utf8");
+    // 0o600 — settings.json may contain MCP tokens or hook commands with secrets;
+    // backups must not be world-readable.
+    await writeFile(bakPath, raw, { encoding: "utf8", mode: 0o600 });
     // Garbage-collect older backups beyond MAX_BACKUPS
     const entries = await readdir(CLAUDE_DIR, { withFileTypes: true });
     const baks = entries
@@ -82,22 +82,36 @@ async function backupSettings(): Promise<void> {
   }
 }
 
+// Plugin keys in ~/.claude/settings.json have the shape `<plugin>@<marketplace>`.
+// Restrict to filename-safe chars to keep arbitrary user input out of settings.json.
+const PLUGIN_KEY_RE = /^[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+$/;
+
+async function atomicWriteJson(path: string, data: string, mode = 0o600): Promise<void> {
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await writeFile(tmp, data, { encoding: "utf8", mode });
+  await rename(tmp, path);
+}
+
 export async function toggleUserItem(filePath: string): Promise<void> {
-  if (!(await safeUserPath(filePath))) {
+  const realSrc = await resolveSafeUserPath(filePath);
+  if (!realSrc) {
     throw new Error(
       `Refusing to toggle file outside ~/.claude/skills, /agents, or /commands: ${filePath}`
     );
   }
-  const newPath = filePath.endsWith(".disabled")
-    ? filePath.slice(0, -".disabled".length)
-    : `${filePath}.disabled`;
-  await rename(filePath, newPath);
-  // Invalidate every route below the root layout so toggles from /items,
-  // /sessions, /context, and / all see fresh state on next navigation.
+  const realDst = realSrc.endsWith(".disabled")
+    ? realSrc.slice(0, -".disabled".length)
+    : `${realSrc}.disabled`;
+  // Operate on the canonical resolved path, not the caller-supplied string —
+  // closes the TOCTOU window where a symlink could be swapped after the check.
+  await rename(realSrc, realDst);
   revalidatePath("/", "layout");
 }
 
 export async function togglePlugin(pluginKey: string): Promise<void> {
+  if (!PLUGIN_KEY_RE.test(pluginKey)) {
+    throw new Error(`Refusing to toggle plugin with invalid key: ${pluginKey}`);
+  }
   await backupSettings();
   const raw = await readFile(SETTINGS_PATH, "utf8");
   const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -105,9 +119,7 @@ export async function togglePlugin(pluginKey: string): Promise<void> {
   const current = ep[pluginKey] !== false;
   ep[pluginKey] = !current;
   parsed.enabledPlugins = ep;
-  await writeFile(SETTINGS_PATH, JSON.stringify(parsed, null, 2) + "\n", "utf8");
-  // Invalidate every route below the root layout so toggles from /items,
-  // /sessions, /context, and / all see fresh state on next navigation.
+  await atomicWriteJson(SETTINGS_PATH, JSON.stringify(parsed, null, 2) + "\n");
   revalidatePath("/", "layout");
 }
 
@@ -119,23 +131,18 @@ export async function disableUserItems(filePaths: string[]): Promise<{ moved: nu
   let moved = 0;
   let skipped = 0;
   for (const fp of filePaths) {
-    if (!(await safeUserPath(fp))) {
-      skipped++;
-      continue;
-    }
-    if (fp.endsWith(".disabled")) {
+    const realSrc = await resolveSafeUserPath(fp);
+    if (!realSrc || realSrc.endsWith(".disabled")) {
       skipped++;
       continue;
     }
     try {
-      await rename(fp, `${fp}.disabled`);
+      await rename(realSrc, `${realSrc}.disabled`);
       moved++;
     } catch {
       skipped++;
     }
   }
-  // Invalidate every route below the root layout so toggles from /items,
-  // /sessions, /context, and / all see fresh state on next navigation.
   revalidatePath("/", "layout");
   return { moved, skipped };
 }

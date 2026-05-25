@@ -9,6 +9,7 @@ const enc = getEncoding("cl100k_base");
 
 const DRY_RUN_EVENTS = new Set(["SessionStart", "UserPromptSubmit"]);
 const DRY_RUN_TIMEOUT_MS = 5000;
+const MAX_STDOUT_BYTES = 512 * 1024;
 
 export type HookEntry = {
   event: string;
@@ -27,22 +28,39 @@ function countTokens(s: string): number {
 
 async function runHook(command: string, sampleInput: object): Promise<{ stdout: string; error?: string; timeout?: boolean }> {
   return new Promise((resolve) => {
-    const child = spawn("bash", ["-lc", command], { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn("bash", ["-c", command], { stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
+    const kill = () => {
       try {
         child.kill("SIGKILL");
       } catch {
         // ignore
       }
+    };
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      kill();
       resolve({ stdout, timeout: true });
     }, DRY_RUN_TIMEOUT_MS);
-    child.stdout?.on("data", (d) => (stdout += d.toString()));
-    child.stderr?.on("data", (d) => (stderr += d.toString()));
+    child.stdout?.on("data", (d) => {
+      if (stdout.length >= MAX_STDOUT_BYTES) {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          kill();
+          resolve({ stdout });
+        }
+        return;
+      }
+      stdout += d.toString();
+      if (stdout.length > MAX_STDOUT_BYTES) stdout = stdout.slice(0, MAX_STDOUT_BYTES);
+    });
+    child.stderr?.on("data", (d) => {
+      if (stderr.length < MAX_STDOUT_BYTES) stderr += d.toString();
+    });
     child.on("error", (err) => {
       if (done) return;
       done = true;
