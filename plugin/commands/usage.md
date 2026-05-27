@@ -7,7 +7,7 @@ allowed-tools: Bash
 The user wants to open the contextscope dashboard. Run this **once** in a background bash invocation:
 
 ```bash
-npx @mbeato/contextscope --no-open > /tmp/contextscope.log 2>&1 &
+npx @mbeato/contextscope ui --no-open > /tmp/contextscope.log 2>&1 &
 sleep 2
 grep "running on" /tmp/contextscope.log | tail -1
 ```

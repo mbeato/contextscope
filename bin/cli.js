@@ -3,11 +3,12 @@
  * contextscope CLI
  *
  * Subcommands:
- *   (default)         spawn the dashboard server + open browser
+ *   (default)         print 30-day summary to stdout (fast, no browser)
+ *   ui                spawn the dashboard server + open browser
  *   install-plugin    install the /usage slash command for Claude Code
  *   uninstall-plugin  remove the slash command
  *
- * Flags (default cmd):
+ * Flags (ui cmd):
  *   --port <n>        pin a port (errors if taken)
  *   --no-open         skip auto-opening the browser
  *   --help            show this
@@ -35,14 +36,15 @@ const subcommand = args[0] && !args[0].startsWith("-") ? args[0] : null;
 if (args.includes("--help") || args.includes("-h")) {
   process.stdout.write(
     [
-      "contextscope — local dashboard for Claude Code per-turn context audit",
+      "contextscope — Claude Code per-turn context audit",
       "",
       "Usage:",
-      "  contextscope                     start the dashboard (default)",
+      "  contextscope                     print 30-day summary (fast, no browser)",
+      "  contextscope ui                  launch the dashboard (toggles + sessions + by-project)",
       "  contextscope install-plugin      install the /usage slash command",
       "  contextscope uninstall-plugin    remove the /usage slash command",
       "",
-      "Flags (default cmd):",
+      "Flags (ui cmd):",
       "  --port <n>     pin a port (default: find first free starting at 3939)",
       "  --no-open      do not open the browser automatically",
       "  --help         show this message",
@@ -74,6 +76,20 @@ if (subcommand === "uninstall-plugin") {
   }
   process.exit(0);
 }
+
+// Default: print summary. `ui` subcommand: launch dashboard.
+if (subcommand !== "ui") {
+  const { printSummary } = await import("./summary.js");
+  try {
+    await printSummary({ days: 30 });
+    process.exit(0);
+  } catch (err) {
+    process.stderr.write(`fatal: ${err?.message ?? err}\n`);
+    process.exit(1);
+  }
+}
+
+// ── UI mode below ──────────────────────────────────────────────────────────
 
 const pinnedPortIdx = args.indexOf("--port");
 const pinnedPort = pinnedPortIdx >= 0 ? Number(args[pinnedPortIdx + 1]) : null;
@@ -134,7 +150,7 @@ async function findPort() {
   process.exit(1);
 }
 
-async function main() {
+async function launchUi() {
   await ensureStaticAssets();
   const port = await findPort();
   const url = `http://localhost:${port}`;
@@ -157,7 +173,6 @@ async function main() {
   if (!noOpen) {
     const { default: open } = await import("open");
     (async () => {
-      // Probe readiness with a path that doesn't trigger the scans.
       let ready = false;
       for (let i = 0; i < 50; i++) {
         try {
@@ -195,7 +210,7 @@ async function main() {
   child.on("exit", (code) => process.exit(code ?? 0));
 }
 
-main().catch((err) => {
+launchUi().catch((err) => {
   process.stderr.write(`fatal: ${err?.message ?? err}\n`);
   process.exit(1);
 });

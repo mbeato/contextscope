@@ -1,25 +1,34 @@
 # contextscope
 
-A local dashboard that audits the **per-turn token context** Claude Code loads on every conversation turn — and gives you toggle-based control to disable what you don't use.
+A CLI + local dashboard that audits the **per-turn token context** Claude Code loads on every conversation turn — and gives you toggle-based control to disable what you don't use.
 
 `/stats`, `/cost`, and `ccusage` show **aggregate** spend. None of them break down what's *inside* the per-turn baseline or let you act on the audit. At 1M-context Opus, every unused skill, agent, command, or hook output that lives in the available-list block is paying full cache-read cost on every turn — for a heavy user, that's hundreds of millions of tokens per month.
 
-## Install + run
+## Quick look (CLI)
 
 ```bash
 npx @mbeato/contextscope
 ```
 
-Picks a free port starting at 3939, opens your browser, audits in real time.
+Prints a 30-day audit to stdout in ~3s. Per-turn baseline, 30-day burn + API-equivalent cost, top disable candidates, context overhead. No browser, no server.
+
+## Full dashboard (browser)
+
+```bash
+npx @mbeato/contextscope ui
+```
+
+Picks a free port starting at 3939, opens your browser. Adds: toggle-to-disable buttons, per-session drilldown, daily burn graph, by-project breakdown, hook + MCP detail.
 
 Or install globally so the `contextscope` command stays around:
 
 ```bash
 npm install -g @mbeato/contextscope
-contextscope
+contextscope        # quick CLI summary
+contextscope ui     # dashboard
 ```
 
-Flags:
+Flags (ui only):
 - `--port <n>` — pin a port
 - `--no-open` — don't auto-open the browser
 - `--help` — full usage
@@ -90,7 +99,8 @@ Requires Node 18+. macOS/Linux paths; Windows untested but uses `os.homedir()` t
 - **`lib/mcp.ts`** — reads `.claude.json` mcpServers, parses PTC's downstream config.yaml
 - **`app/actions.ts`** — server actions for toggles + bulk disable; backs up settings before write
 - **`app/page.tsx`** — single server-rendered page; filesystem re-read on every load (cached internally)
-- **`bin/cli.js`** — CLI entry: spawns Next.js standalone server, opens browser, ships subcommands
+- **`bin/cli.js`** — CLI entry: routes to `summary.js` (default) or launches the Next.js dashboard (`ui` subcommand)
+- **`bin/summary.js`** — pure-JS CLI summary; mirrors the lib/* logic without Next.js for the fast first-impression printout
 
 ## License
 
