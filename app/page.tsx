@@ -23,10 +23,11 @@ import { getContextFiles } from "@/lib/files";
 import { getHooks } from "@/lib/hooks";
 import { formatUsd } from "@/lib/pricing";
 import { MiniStat } from "./components/Receipt";
+import { RangeToggle } from "./components/RangeToggle";
 import { toggleUserItem } from "./actions";
+import { parseDays } from "@/lib/range";
 
 const fmt = new Intl.NumberFormat("en-US");
-const DAYS = 30;
 
 export const dynamic = "force-dynamic";
 
@@ -87,14 +88,14 @@ function SecondaryReceiptSkeleton({ title }: { title: string }) {
 
 // ─── Receipts (one async server component per receipt) ─────────────────────
 
-async function PrimaryReceipt() {
+async function PrimaryReceipt({ days }: { days: number }) {
   const items = await getInventory();
   const inv = summarize(items);
   return (
     <div className="w-full max-w-md rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
       <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-zinc-200 dark:border-zinc-800">
         <span className="text-[10px] uppercase tracking-widest text-zinc-500">
-          {DAYS}-day window
+          {days}-day window
         </span>
         <Link
           href="/items"
@@ -125,15 +126,15 @@ async function PrimaryReceipt() {
   );
 }
 
-async function BurnReceipt() {
-  const sessions = await getSessions(DAYS);
+async function BurnReceipt({ days }: { days: number }) {
+  const sessions = await getSessions(days);
   const sess = summarizeSessions(sessions);
   const maxBurn = Math.max(1, ...sess.dailyBurn.map((d) => d.tokens));
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-4 flex flex-col h-full">
       <div className="flex items-baseline justify-between">
         <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-          {DAYS}-day burn
+          {days}-day burn
         </div>
         <Link
           href="/sessions"
@@ -191,8 +192,8 @@ async function BurnReceipt() {
   );
 }
 
-async function CandidatesReceipt() {
-  const [items, usage] = await Promise.all([getInventory(), getUsage(DAYS)]);
+async function CandidatesReceipt({ days }: { days: number }) {
+  const [items, usage] = await Promise.all([getInventory(), getUsage(days)]);
   const annotated = items.map((it) => ({ ...it, ...lookupUsage(it, usage) }));
   const candidates = annotated
     .filter((a) => !a.disabled && a.invocations === 0 && a.source === "user")
@@ -221,7 +222,7 @@ async function CandidatesReceipt() {
       </div>
       <ul className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-800 text-xs space-y-1 flex-1">
         {candidates.length === 0 ? (
-          <li className="text-zinc-500">every loaded user item invoked in {DAYS}d.</li>
+          <li className="text-zinc-500">every loaded user item invoked in {days}d.</li>
         ) : (
           candidates.map((c) => (
             <li key={c.filePath} className="flex items-center gap-2">
@@ -328,7 +329,12 @@ async function ContextReceipt() {
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 
-export default function Cockpit() {
+export default async function Cockpit({
+  searchParams,
+}: {
+  searchParams: Promise<{ days?: string }>;
+}) {
+  const days = parseDays((await searchParams).days);
   return (
     <main className="flex-1 font-mono bg-zinc-50 dark:bg-zinc-950">
       <div className="max-w-6xl mx-auto px-6 py-10">
@@ -339,23 +345,21 @@ export default function Cockpit() {
               audit · trim · ship
             </p>
           </div>
-          <code className="text-[10px] uppercase tracking-widest text-zinc-500">
-            ~/.claude/projects/
-          </code>
+          <RangeToggle />
         </header>
 
         <section className="flex justify-center mb-6">
           <Suspense fallback={<PrimaryReceiptSkeleton />}>
-            <PrimaryReceipt />
+            <PrimaryReceipt days={days} />
           </Suspense>
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Suspense fallback={<SecondaryReceiptSkeleton title={`${DAYS}-day burn`} />}>
-            <BurnReceipt />
+          <Suspense fallback={<SecondaryReceiptSkeleton title={`${days}-day burn`} />}>
+            <BurnReceipt days={days} />
           </Suspense>
           <Suspense fallback={<SecondaryReceiptSkeleton title="disable candidates" />}>
-            <CandidatesReceipt />
+            <CandidatesReceipt days={days} />
           </Suspense>
           <Suspense fallback={<SecondaryReceiptSkeleton title="context overhead" />}>
             <ContextReceipt />

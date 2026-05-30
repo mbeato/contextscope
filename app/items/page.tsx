@@ -4,10 +4,11 @@ import { getSessions } from "@/lib/sessions";
 import { getHooks } from "@/lib/hooks";
 import { getMcpServers } from "@/lib/mcp";
 import { Receipt, Stat } from "../components/Receipt";
+import { RangeToggle } from "../components/RangeToggle";
 import { disableUserItems, togglePlugin, toggleUserItem } from "../actions";
+import { parseDays } from "@/lib/range";
 
 const fmt = new Intl.NumberFormat("en-US");
-const DAYS = 30;
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,12 @@ function shortNumber(n: number): string {
   return String(n);
 }
 
-export default async function ItemsPage() {
+export default async function ItemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ days?: string }>;
+}) {
+  const DAYS = parseDays((await searchParams).days);
   const [items, usage, sessions, hooks, mcpServers] = await Promise.all([
     getInventory(),
     getUsage(DAYS),
@@ -72,9 +78,12 @@ export default async function ItemsPage() {
               skills · agents · commands
             </p>
           </div>
-          <code className="text-[10px] uppercase tracking-widest text-zinc-500">
-            {inv.totalItems} loaded · {fmt.format(inv.totalPerTurnTokens)} tok/turn
-          </code>
+          <div className="flex flex-col items-start sm:items-end gap-2">
+            <RangeToggle />
+            <code className="text-[10px] uppercase tracking-widest text-zinc-500">
+              {inv.totalItems} loaded · {fmt.format(inv.totalPerTurnTokens)} tok/turn
+            </code>
+          </div>
         </header>
 
         <p className="mb-6 text-[10px] uppercase tracking-widest text-zinc-500">

@@ -2,9 +2,10 @@ import { homedir } from "node:os";
 import { getSessions, summarizeSessions } from "@/lib/sessions";
 import { formatUsd } from "@/lib/pricing";
 import { Receipt, Stat } from "../components/Receipt";
+import { RangeToggle } from "../components/RangeToggle";
+import { parseDays } from "@/lib/range";
 
 const fmt = new Intl.NumberFormat("en-US");
-const DAYS = 30;
 const HOME = homedir();
 
 function tildify(p: string): string {
@@ -20,7 +21,12 @@ function shortNumber(n: number): string {
   return String(n);
 }
 
-export default async function SessionsPage() {
+export default async function SessionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ days?: string }>;
+}) {
+  const DAYS = parseDays((await searchParams).days);
   const sessions = await getSessions(DAYS);
   const s = summarizeSessions(sessions);
   const maxDayTokens = Math.max(1, ...s.dailyBurn.map((d) => d.tokens));
@@ -38,9 +44,7 @@ export default async function SessionsPage() {
               ~/.claude/projects · {DAYS}-day window
             </p>
           </div>
-          <span className="text-[10px] uppercase tracking-widest text-zinc-500">
-            {DAYS}-day window
-          </span>
+          <RangeToggle />
         </header>
 
         {s.count === 0 ? (
@@ -57,7 +61,7 @@ export default async function SessionsPage() {
                 <Stat label="sessions" value={fmt.format(s.count)} hint={`avg ${shortNumber(s.averageSessionTokens)}`} />
               </Receipt>
               <Receipt pad="default">
-                <Stat label="30d total" value={shortNumber(s.totalTokens)} hint={`${formatUsd(s.totalCostUsd)} api`} />
+                <Stat label={`${DAYS}d total`} value={shortNumber(s.totalTokens)} hint={`${formatUsd(s.totalCostUsd)} api`} />
               </Receipt>
               <Receipt pad="default">
                 <Stat label="median" value={shortNumber(s.medianSessionTokens)} hint="per session" />
