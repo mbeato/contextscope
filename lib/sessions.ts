@@ -1,4 +1,4 @@
-import { getAllTranscripts, type TranscriptResult } from "./transcripts";
+import { getAllTranscripts, type TranscriptResult, type ModelUsage } from "./transcripts";
 import { costForUsage } from "./pricing";
 
 export type Session = {
@@ -19,6 +19,9 @@ export type Session = {
   toolCalls: Record<string, number>;
   toolErrors: number;
   sidechainTurns: number;
+  // Per-UTC-day, per-model token sums (in-window records only). Drives the
+  // daily-burn chart by real message time.
+  byDay: Record<string, Record<string, ModelUsage>>;
 };
 
 function computeCost(t: TranscriptResult): number {
@@ -56,6 +59,7 @@ function toSession(t: TranscriptResult): Session {
     toolCalls: t.toolCalls,
     toolErrors: t.toolErrors,
     sidechainTurns: t.sidechainTurns,
+    byDay: t.byDay,
   };
 }
 
@@ -129,18 +133,31 @@ export function summarizeSessions(sessions: Session[]): SessionsSummary {
 
   const longSessions = sessions.filter((s) => s.totalTokens >= LONG_SESSION_THRESHOLD);
 
+  // Bucket each token by the day it was actually spent (s.byDay is keyed by the
+  // record's own timestamp), so a resumed session's history spreads across its
+  // real days instead of collapsing onto its last day. Cost is summed per model
+  // since rates differ.
   const byDay = new Map<string, { tokens: number; cost: number }>();
   for (const s of sessions) {
-    const ts = s.endTime || s.startTime;
-    if (!ts) continue;
-    const d = new Date(ts);
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
-      d.getUTCDate()
-    ).padStart(2, "0")}`;
-    const cur = byDay.get(key) ?? { tokens: 0, cost: 0 };
-    cur.tokens += s.totalTokens;
-    cur.cost += s.costUsd;
-    byDay.set(key, cur);
+    for (const [day, models] of Object.entries(s.byDay)) {
+      const cur = byDay.get(day) ?? { tokens: 0, cost: 0 };
+      for (const [model, u] of Object.entries(models)) {
+        cur.tokens +=
+          u.inputTokens +
+          u.cacheReadTokens +
+          u.cacheCreation5mTokens +
+          u.cacheCreation1hTokens +
+          u.outputTokens;
+        cur.cost += costForUsage(model, {
+          input: u.inputTokens,
+          output: u.outputTokens,
+          cacheRead: u.cacheReadTokens,
+          cacheCreation5m: u.cacheCreation5mTokens,
+          cacheCreation1h: u.cacheCreation1hTokens,
+        });
+      }
+      byDay.set(day, cur);
+    }
   }
   const dailyBurn = [...byDay.entries()]
     .map(([date, v]) => ({ date, tokens: v.tokens, cost: v.cost }))

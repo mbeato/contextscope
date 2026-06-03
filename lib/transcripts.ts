@@ -60,6 +60,12 @@ export type TranscriptResult = {
   cacheCreationTokens: number;   // total: 5m + 1h
   outputTokens: number;
   byModel: Record<string, ModelUsage>;
+  // Per-UTC-day, per-model token sums, built during dedup/merge from the
+  // in-window records only. Lets the daily-burn chart bucket tokens by the
+  // message's own timestamp instead of collapsing a resumed session's whole
+  // lifetime onto its endTime. Empty on raw parseFile output; filled by
+  // getAllTranscripts/dedupAndSum.
+  byDay: Record<string, Record<string, ModelUsage>>;
   // Per-message records — kept on the cached result so dedup at aggregate time
   // is exact across resumed sessions.
   usageRecords: UsageRecord[];
@@ -74,6 +80,14 @@ const MAX_CACHE_ENTRIES = 5000;
 
 function inferProjectPath(dirName: string): string {
   return dirName.replace(/^-/, "/").replaceAll("-", "/");
+}
+
+/** UTC day bucket key (YYYY-MM-DD) for a millisecond timestamp. */
+export function utcDayKey(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    d.getUTCDate()
+  ).padStart(2, "0")}`;
 }
 
 async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptResult> {
@@ -105,6 +119,7 @@ async function parseFile(filePath: string, mtimeMs: number): Promise<TranscriptR
     cacheCreationTokens: 0,
     outputTokens: 0,
     byModel: {},
+    byDay: {},
     usageRecords: [],
     invocations: [],
     toolCalls: {},
@@ -243,8 +258,14 @@ async function pMapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<
  *
  * Important: do NOT mutate the cached `raws` objects — they're shared across
  * calls.
+ *
+ * `cutoffMs` clips the window by each record's OWN timestamp: records older than
+ * the cutoff are dropped from all totals so "last N days" counts tokens by when
+ * they were actually spent, not by the file's mtime (which clusters recent
+ * because Claude Code rewrites transcripts). Records with no timestamp (ts <= 0)
+ * can't be placed, so they're kept. Pass 0 to disable clipping.
  */
-function dedupAndSum(raws: TranscriptResult[]): TranscriptResult[] {
+export function dedupAndSum(raws: TranscriptResult[], cutoffMs = 0): TranscriptResult[] {
   const sorted = [...raws].sort((a, b) => a.mtimeMs - b.mtimeMs);
   const seen = new Set<string>();
   const merged = new Map<string, TranscriptResult>();
@@ -268,6 +289,7 @@ function dedupAndSum(raws: TranscriptResult[]): TranscriptResult[] {
         cacheCreationTokens: 0,
         outputTokens: 0,
         byModel: {},
+        byDay: {},
         usageRecords: [],
         invocations: [],
         toolCalls: {},
@@ -294,6 +316,10 @@ function dedupAndSum(raws: TranscriptResult[]): TranscriptResult[] {
 
     const modelSet = new Set<string>(t.models);
     for (const u of r.usageRecords) {
+      // Clip by the record's own timestamp before touching `seen`, so an
+      // out-of-window record doesn't burn its dedupKey and hide an in-window
+      // duplicate.
+      if (cutoffMs > 0 && u.ts > 0 && u.ts < cutoffMs) continue;
       if (u.dedupKey) {
         if (seen.has(u.dedupKey)) continue;
         seen.add(u.dedupKey);
@@ -321,6 +347,21 @@ function dedupAndSum(raws: TranscriptResult[]): TranscriptResult[] {
       if (u.ts > 0) {
         if (!t.startTime || u.ts < t.startTime) t.startTime = u.ts;
         if (u.ts > t.endTime) t.endTime = u.ts;
+        const day = utcDayKey(u.ts);
+        const dm = t.byDay[day] ?? (t.byDay[day] = {});
+        const dbm = dm[u.model] ?? {
+          inputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreation5mTokens: 0,
+          cacheCreation1hTokens: 0,
+          outputTokens: 0,
+        };
+        dbm.inputTokens += u.input;
+        dbm.cacheReadTokens += u.cacheRead;
+        dbm.cacheCreation5mTokens += u.cacheCreation5m;
+        dbm.cacheCreation1hTokens += u.cacheCreation1h;
+        dbm.outputTokens += u.output;
+        dm[u.model] = dbm;
       }
     }
     t.models = [...modelSet];
@@ -381,5 +422,5 @@ export async function getAllTranscripts(daysBack: number = 30): Promise<Transcri
     })
   );
   const raws = await pMapLimit(candidates, 16, (c) => getFileResult(c.filePath, c.mtimeMs));
-  return dedupAndSum(raws);
+  return dedupAndSum(raws, cutoff);
 }
