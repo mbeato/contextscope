@@ -24,7 +24,7 @@ import { getHooks } from "@/lib/hooks";
 import { formatUsd } from "@/lib/pricing";
 import { MiniStat } from "./components/Receipt";
 import { RangeToggle } from "./components/RangeToggle";
-import { toggleUserItem } from "./actions";
+import { setUserItem } from "./actions";
 import { parseDays } from "@/lib/range";
 
 const fmt = new Intl.NumberFormat("en-US");
@@ -236,7 +236,7 @@ async function CandidatesReceipt({ days }: { days: number }) {
               <form
                 action={async () => {
                   "use server";
-                  await toggleUserItem(c.filePath);
+                  await setUserItem(c.filePath, "disabled");
                 }}
               >
                 <button

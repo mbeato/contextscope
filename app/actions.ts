@@ -4,6 +4,7 @@ import { readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/pr
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { revalidatePath } from "next/cache";
+import { exists } from "../lib/inventory";
 
 const HOME = homedir();
 const CLAUDE_DIR = join(HOME, ".claude");
@@ -92,19 +93,61 @@ async function atomicWriteJson(path: string, data: string, mode = 0o600): Promis
   await rename(tmp, path);
 }
 
-export async function toggleUserItem(filePath: string): Promise<void> {
+type ItemState = "enabled" | "disabled";
+
+/**
+ * Move a user item to the requested on-disk state, idempotently. Resolves the
+ * two possible siblings (foo / foo.disabled) from the validated real path and
+ * renames only when disk differs from `target`.
+ *
+ * Intent-explicit: callers pass the state they WANT, not a blind flip. This is
+ * what makes the action immune to a stale UI view — re-issuing "disable" on an
+ * already-disabled item is a no-op, never an ENOENT crash or a wrong-direction
+ * flip (which a suffix-decided toggle would do when the rendered state lagged
+ * disk). Already-in-target and item-gone are both no-ops, not errors.
+ *
+ * Returns true if a rename actually happened. Throws only for a real fault:
+ * outside the allowlist, or both siblings present (refusing to clobber).
+ */
+async function setUserItemState(filePath: string, target: ItemState): Promise<boolean> {
   const realSrc = await resolveSafeUserPath(filePath);
   if (!realSrc) {
     throw new Error(
       `Refusing to toggle file outside ~/.claude/skills, /agents, or /commands: ${filePath}`
     );
   }
-  const realDst = realSrc.endsWith(".disabled")
+  // Both siblings live in the same already-allowlisted directory; derive them
+  // from the canonical real path rather than trusting the caller's suffix.
+  const enabledPath = realSrc.endsWith(".disabled")
     ? realSrc.slice(0, -".disabled".length)
-    : `${realSrc}.disabled`;
-  // Operate on the canonical resolved path, not the caller-supplied string —
-  // closes the TOCTOU window where a symlink could be swapped after the check.
-  await rename(realSrc, realDst);
+    : realSrc;
+  const disabledPath = `${enabledPath}.disabled`;
+  const src = target === "disabled" ? enabledPath : disabledPath;
+  const dst = target === "disabled" ? disabledPath : enabledPath;
+
+  // Already in the target state, or the item is gone entirely: nothing to do.
+  if (!(await exists(src))) return false;
+
+  // Both siblings present (anomalous — e.g. a crashed prior op). A bare rename
+  // would silently overwrite `dst` via POSIX semantics and destroy its content,
+  // so refuse and surface the inconsistency instead of losing data.
+  if (await exists(dst)) {
+    throw new Error(`Refusing to overwrite existing ${dst} — both siblings present on disk`);
+  }
+
+  try {
+    await rename(src, dst);
+    return true;
+  } catch (err) {
+    // Lost a check-then-rename race to a concurrent op that already moved it:
+    // the desired end state is reached, so treat as a no-op rather than a 500.
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+export async function setUserItem(filePath: string, target: ItemState): Promise<void> {
+  await setUserItemState(filePath, target);
   revalidatePath("/", "layout");
 }
 
@@ -131,14 +174,12 @@ export async function disableUserItems(filePaths: string[]): Promise<{ moved: nu
   let moved = 0;
   let skipped = 0;
   for (const fp of filePaths) {
-    const realSrc = await resolveSafeUserPath(fp);
-    if (!realSrc || realSrc.endsWith(".disabled")) {
-      skipped++;
-      continue;
-    }
     try {
-      await rename(realSrc, `${realSrc}.disabled`);
-      moved++;
+      // Same disk-reconciling, idempotent path as the single toggle: a stale
+      // entry that's already disabled (or gone) is a no-op counted as skipped,
+      // not a silent miss against a now-wrong suffix.
+      if (await setUserItemState(fp, "disabled")) moved++;
+      else skipped++;
     } catch {
       skipped++;
     }

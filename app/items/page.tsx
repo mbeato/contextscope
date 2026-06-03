@@ -5,7 +5,7 @@ import { getHooks } from "@/lib/hooks";
 import { getMcpServers } from "@/lib/mcp";
 import { Receipt, Stat } from "../components/Receipt";
 import { RangeToggle } from "../components/RangeToggle";
-import { disableUserItems, togglePlugin, toggleUserItem } from "../actions";
+import { disableUserItems, setUserItem, togglePlugin } from "../actions";
 import { parseDays } from "@/lib/range";
 
 const fmt = new Intl.NumberFormat("en-US");
@@ -305,7 +305,7 @@ export default async function ItemsPage({
                           <form
                             action={async () => {
                               "use server";
-                              await toggleUserItem(it.filePath);
+                              await setUserItem(it.filePath, it.disabled ? "enabled" : "disabled");
                             }}
                           >
                             <ToggleButton enabled={!it.disabled} />

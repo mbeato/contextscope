@@ -41,7 +41,7 @@ function countTokens(s: string): number {
   return enc.encode(s).length;
 }
 
-async function exists(p: string): Promise<boolean> {
+export async function exists(p: string): Promise<boolean> {
   try {
     await stat(p);
     return true;
