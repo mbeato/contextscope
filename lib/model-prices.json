@@ -38,6 +38,13 @@
       "cache_creation_5m": 0.00000375,
       "cache_creation_1h": 0.0000075
     },
+    "claude-fable-5": {
+      "input": 0.00001,
+      "output": 0.00005,
+      "cache_read": 0.000001,
+      "cache_creation_5m": 0.0000125,
+      "cache_creation_1h": 0.00002
+    },
     "claude-haiku-4-5": {
       "input": 0.000001,
       "output": 0.000005,
