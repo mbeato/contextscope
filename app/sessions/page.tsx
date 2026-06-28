@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { getSessions, summarizeSessions } from "@/lib/sessions";
+import { getSessionsWithArchive, summarizeSessions } from "@/lib/sessions";
 import { formatUsd } from "@/lib/pricing";
 import { Receipt, Stat } from "../components/Receipt";
 import { RangeToggle } from "../components/RangeToggle";
@@ -27,8 +27,8 @@ export default async function SessionsPage({
   searchParams: Promise<{ days?: string }>;
 }) {
   const DAYS = parseDays((await searchParams).days);
-  const sessions = await getSessions(DAYS);
-  const s = summarizeSessions(sessions);
+  const { sessions, archiveDays } = await getSessionsWithArchive(DAYS);
+  const s = summarizeSessions(sessions, archiveDays);
   const maxDayTokens = Math.max(1, ...s.dailyBurn.map((d) => d.tokens));
   const tools = Object.entries(s.totalToolCalls).sort((a, b) => b[1] - a[1]);
   const maxToolCount = Math.max(1, ...tools.map(([, c]) => c));
@@ -43,11 +43,16 @@ export default async function SessionsPage({
             <p className="text-[10px] uppercase tracking-widest text-zinc-500 mt-1">
               ~/.claude/projects · {DAYS}-day window
             </p>
+            {DAYS > 30 && (
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-600 mt-1 normal-case tracking-normal">
+                burn history archived past Claude Code&apos;s ~30-day cleanup · session/distribution stats reflect retained data
+              </p>
+            )}
           </div>
           <RangeToggle />
         </header>
 
-        {s.count === 0 ? (
+        {s.count === 0 && s.dailyBurn.length === 0 ? (
           <Receipt label="no data">
             <p className="text-sm text-zinc-500">
               No transcripts found in <code>~/.claude/projects/</code> within the last {DAYS} days.
@@ -81,19 +86,47 @@ export default async function SessionsPage({
               <Receipt pad="default">
                 <Stat label="subagent share" value={`${((s.totalSidechainTurns / Math.max(1, s.totalTurns)) * 100).toFixed(0)}%`} hint={`${fmt.format(s.totalSidechainTurns)} turns`} />
               </Receipt>
+              <Receipt pad="default">
+                <Stat
+                  label="fresh tokens"
+                  value={shortNumber(s.totalFreshTokens)}
+                  hint={`${((s.totalFreshTokens / Math.max(1, s.totalTokens)) * 100).toFixed(1)}% · rest cache-read`}
+                />
+              </Receipt>
+              <Receipt pad="default">
+                <Stat
+                  label="headless burn"
+                  value={`${fmt.format(s.headlessCount)} sess`}
+                  hint={`${shortNumber(s.headlessTokens)} · ${formatUsd(s.headlessCostUsd)} api`}
+                />
+              </Receipt>
             </section>
 
-            {/* Daily burn */}
+            {/* Daily burn — each bar splits fresh (solid) vs cache-read (faded);
+                the thin amber lane underneath is the headless (`claude -p`) share. */}
             <section className="mb-6">
               <Receipt label={`daily burn · ${s.dailyBurn.length} active days · ${formatUsd(s.totalCostUsd)} api total`}>
-                <div className="space-y-1">
+                <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-zinc-500 mb-2">
+                  <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 bg-zinc-700 dark:bg-zinc-300" />fresh</span>
+                  <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 bg-zinc-300 dark:bg-zinc-700" />cache-read</span>
+                  <span className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 bg-amber-500" />headless</span>
+                </div>
+                <div className="space-y-1.5">
                   {s.dailyBurn.map((d) => {
-                    const pct = (d.tokens / maxDayTokens) * 100;
+                    const dayPct = (d.tokens / maxDayTokens) * 100;
+                    const freshPct = d.tokens > 0 ? (d.fresh / d.tokens) * 100 : 0;
+                    const headlessPct = (d.headlessTokens / maxDayTokens) * 100;
                     return (
                       <div key={d.date} className="flex items-center gap-3 text-xs">
                         <div className="w-24 text-zinc-500 tabular-nums">{d.date}</div>
-                        <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800/60">
-                          <div className="h-full bg-zinc-700 dark:bg-zinc-300" style={{ width: `${pct}%` }} />
+                        <div className="flex-1">
+                          <div className="h-2 bg-zinc-100 dark:bg-zinc-800/60">
+                            <div className="h-full flex" style={{ width: `${dayPct}%` }}>
+                              <div className="h-full bg-zinc-700 dark:bg-zinc-300" style={{ width: `${freshPct}%` }} />
+                              <div className="h-full bg-zinc-300 dark:bg-zinc-700" style={{ width: `${100 - freshPct}%` }} />
+                            </div>
+                          </div>
+                          <div className="h-0.5 mt-0.5 bg-amber-500" style={{ width: `${headlessPct}%` }} />
                         </div>
                         <div className="w-20 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
                           {shortNumber(d.tokens)}

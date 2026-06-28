@@ -18,7 +18,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { getInventory, summarize } from "@/lib/inventory";
 import { getUsage, lookupUsage } from "@/lib/usage";
-import { getSessions, summarizeSessions } from "@/lib/sessions";
+import { getSessionsWithArchive, summarizeSessions } from "@/lib/sessions";
 import { getContextFiles } from "@/lib/files";
 import { getHooks } from "@/lib/hooks";
 import { formatUsd } from "@/lib/pricing";
@@ -127,8 +127,8 @@ async function PrimaryReceipt({ days }: { days: number }) {
 }
 
 async function BurnReceipt({ days }: { days: number }) {
-  const sessions = await getSessions(days);
-  const sess = summarizeSessions(sessions);
+  const { sessions, archiveDays } = await getSessionsWithArchive(days);
+  const sess = summarizeSessions(sessions, archiveDays);
   const maxBurn = Math.max(1, ...sess.dailyBurn.map((d) => d.tokens));
   return (
     <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-4 flex flex-col h-full">
