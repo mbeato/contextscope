@@ -1,6 +1,6 @@
 {
   "_source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
-  "_refreshedAt": "2026-05-30T19:17:56.836Z",
+  "_refreshedAt": "2026-07-23T18:39:46.084Z",
   "_description": "Anthropic model prices in USD per token (input, output, cache_read, cache_creation 5min default). Refresh with `npm run refresh-prices`.",
   "models": {
     "claude-3-7-sonnet-20250219": {
@@ -141,21 +141,28 @@
       "output": 0.000015,
       "cache_read": 3e-7,
       "cache_creation_5m": 0.00000375,
-      "cache_creation_1h": 0.0000075
+      "cache_creation_1h": 0.000006
     },
     "claude-sonnet-4-5-20250929": {
       "input": 0.000003,
       "output": 0.000015,
       "cache_read": 3e-7,
       "cache_creation_5m": 0.00000375,
-      "cache_creation_1h": 0.0000075
+      "cache_creation_1h": 0.000006
     },
     "claude-sonnet-4-6": {
       "input": 0.000003,
       "output": 0.000015,
       "cache_read": 3e-7,
       "cache_creation_5m": 0.00000375,
-      "cache_creation_1h": 0.0000075
+      "cache_creation_1h": 0.000006
+    },
+    "claude-sonnet-5": {
+      "input": 0.000002,
+      "output": 0.00001,
+      "cache_read": 2e-7,
+      "cache_creation_5m": 0.0000025,
+      "cache_creation_1h": 0.000004
     }
   }
 }
