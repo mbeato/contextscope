@@ -26,8 +26,8 @@ const MODELS = prices.models as Record<string, ModelPrice>;
 // Aliases for short model names that appear in some CC transcripts.
 // Map each to the latest released model of that tier.
 const ALIASES: Record<string, string> = {
-  opus: "claude-opus-4-7",
-  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-5",
+  sonnet: "claude-sonnet-5",
   haiku: "claude-haiku-4-5",
 };
 

@@ -25,8 +25,8 @@ const PRICES = JSON.parse(
   await readFile(join(HERE, "..", "lib", "model-prices.json"), "utf8")
 ).models;
 const ALIASES = {
-  opus: "claude-opus-4-7",
-  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-5",
+  sonnet: "claude-sonnet-5",
   haiku: "claude-haiku-4-5",
 };
 
